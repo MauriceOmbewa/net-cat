@@ -29,20 +29,6 @@ type Server struct {
 }
 
 func main() {
-	file, err := os.ReadFile("linux.txt")
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println(string(file))
-
-	// var name string
-
-	fmt.Print("[ENTER YOUR NAME]:")
-
-	// fmt.Scanln(&name)
-	// fmt.Println("welcome", name)
-
 	ln, _ := net.Listen("tcp", ":8989")
 	defer ln.Close()
 
@@ -123,7 +109,12 @@ func (s *Server) run() {
 
 func (s *Server) handleClient(conn net.Conn) {
 	// Send welcome message and get client name
-	// conn.Write([]byte(logo + "[ENTER YOUR NAME]: "))
+	file, err := os.ReadFile("linux.txt")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	conn.Write([]byte(string(file) + "\n" + "[ENTER YOUR NAME]: "))
 	reader := bufio.NewReader(conn)
 	name, err := reader.ReadString('\n')
 	if err != nil {
@@ -136,6 +127,11 @@ func (s *Server) handleClient(conn net.Conn) {
 		conn.Write([]byte("Name cannot be empty\n"))
 		conn.Close()
 		return
+	} else {
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
+		msg := fmt.Sprintf("[%s][%s]:", timestamp ,name)
+		conn.Write([]byte(msg))
+
 	}
 
 	client := &Client{
