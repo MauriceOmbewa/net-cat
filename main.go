@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -20,4 +22,13 @@ type Server struct {
 	unregister chan *Client
 	messages   []string // Store message history
 	mutex      sync.Mutex
+}
+
+func main() {
+	file, err := os.ReadFile("linux.txt")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(string(file))
 }
