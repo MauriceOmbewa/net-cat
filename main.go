@@ -79,3 +79,41 @@ func NewServer() *Server {
 		messages:   []string{},
 	}
 }
+
+func (s *Server) run() {
+	for {
+		select {
+		case client := <-s.register:
+			s.mutex.Lock()
+			s.clients[client] = true
+			// Send message history to new client
+			for _, msg := range s.messages {
+				client.messages <- msg
+			}
+			s.mutex.Unlock()
+			s.broadcast <- fmt.Sprintf("[%s] %s has joined our chat...", time.Now().Format("2006-01-02 15:04:05"), client.name)
+			
+		case client := <-s.unregister:
+			s.mutex.Lock()
+			if _, ok := s.clients[client]; ok {
+				delete(s.clients, client)
+				close(client.messages)
+			}
+			s.mutex.Unlock()
+			s.broadcast <- fmt.Sprintf("[%s] %s has left our chat...", time.Now().Format("2006-01-02 15:04:05"), client.name)
+			
+		case message := <-s.broadcast:
+			s.mutex.Lock()
+			s.messages = append(s.messages, message)
+			for client := range s.clients {
+				select {
+				case client.messages <- message:
+				default:
+					close(client.messages)
+					delete(s.clients, client)
+				}
+			}
+			s.mutex.Unlock()
+		}
+	}
+}
