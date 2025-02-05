@@ -68,3 +68,14 @@ func main() {
 		go server.handleClient(conn)
 	}
 }
+
+// Create a new server instance
+func NewServer() *Server {
+	return &Server{
+		clients:    make(map[*Client]bool),
+		broadcast:  make(chan string),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		messages:   []string{},
+	}
+}
