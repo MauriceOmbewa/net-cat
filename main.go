@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"net"
-	"os"
 	"sync"
 )
 
@@ -24,11 +22,24 @@ type Server struct {
 	mutex      sync.Mutex
 }
 
-func main() {
+
+func main(){
 	file, err := os.ReadFile("linux.txt")
-	if err != nil {
+	if err != nil{
 		fmt.Println(err)
 	}
 
 	fmt.Println(string(file))
+
+	// var name string
+
+	fmt.Print("[ENTER YOUR NAME]:")
+
+	// fmt.Scanln(&name)
+	// fmt.Println("welcome", name)
+
+	ln, _ := net.Listen("tcp", ":8989")
+	defer ln.Close()
+
+
 }
