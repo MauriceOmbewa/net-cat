@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Client represents a connected chat client
@@ -92,7 +95,7 @@ func (s *Server) run() {
 			}
 			s.mutex.Unlock()
 			s.broadcast <- fmt.Sprintf("[%s] %s has joined our chat...", time.Now().Format("2006-01-02 15:04:05"), client.name)
-			
+
 		case client := <-s.unregister:
 			s.mutex.Lock()
 			if _, ok := s.clients[client]; ok {
@@ -101,7 +104,7 @@ func (s *Server) run() {
 			}
 			s.mutex.Unlock()
 			s.broadcast <- fmt.Sprintf("[%s] %s has left our chat...", time.Now().Format("2006-01-02 15:04:05"), client.name)
-			
+
 		case message := <-s.broadcast:
 			s.mutex.Lock()
 			s.messages = append(s.messages, message)
@@ -114,6 +117,56 @@ func (s *Server) run() {
 				}
 			}
 			s.mutex.Unlock()
+		}
+	}
+}
+
+func (s *Server) handleClient(conn net.Conn) {
+	// Send welcome message and get client name
+	// conn.Write([]byte(logo + "[ENTER YOUR NAME]: "))
+	reader := bufio.NewReader(conn)
+	name, err := reader.ReadString('\n')
+	if err != nil {
+		conn.Close()
+		return
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		conn.Write([]byte("Name cannot be empty\n"))
+		conn.Close()
+		return
+	}
+
+	client := &Client{
+		conn:     conn,
+		name:     name,
+		messages: make(chan string, 10),
+	}
+
+	s.register <- client
+
+	// Start goroutine for writing messages to client
+	go func() {
+		for msg := range client.messages {
+			conn.Write([]byte(msg + "\n"))
+		}
+	}()
+
+	// Read messages from client
+	for {
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			s.unregister <- client
+			return
+		}
+
+		message = strings.TrimSpace(message)
+		if message != "" {
+			s.broadcast <- fmt.Sprintf("[%s][%s]: %s",
+				time.Now().Format("2006-01-02 15:04:05"),
+				client.name,
+				message)
 		}
 	}
 }
