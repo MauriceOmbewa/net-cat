@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -61,6 +62,9 @@ func main() {
 		conn.Write([]byte(string("[ENTER YOUR NAME]: ")))
 
 		go handleClient(conn)
+
+		// // Send chat history before asking for name
+		// sendChatHistory(conn)
 	}
 }
 
@@ -96,10 +100,13 @@ func handleClient(conn net.Conn) {
 	clients[conn] = name
 	mu.Unlock()
 
+	// Send chat history before asking for name
+	sendChatHistory(conn, name)
+
 	// Notify all users about the new connection
 	broadcast <- fmt.Sprintf("%s has joined our chat...\n", name)
 	
-	name = "[" + name + "]"
+	namee := "[" + name + "]"
 	timestamp = "[" + timestamp + "]"
 
 	// Continuously listen for messages from this user
@@ -114,7 +121,7 @@ func handleClient(conn net.Conn) {
 		}
 
 		// Broadcast the message with the user's name
-		broadcast <- fmt.Sprintf("%s%s: %s", timestamp, name, msg)
+		broadcast <- fmt.Sprintf("%s%s: %s", timestamp, namee, msg)
 	}
 	// Handle user disconnection
 	mu.Lock()
@@ -131,5 +138,25 @@ func logToFile(msg string) {
 	_, err := logFile.WriteString(msg)
 	if err != nil {
 		log.Printf("Error writing to log file: %v", err)
+	}
+}
+
+// sendChatHistory reads and sends past messages to a new user
+func sendChatHistory(conn net.Conn, name string) {
+	logMu.Lock()
+	defer logMu.Unlock()
+
+	// Open the log file for reading
+	file, err := os.Open("chat_log.txt")
+	if err != nil {
+		conn.Write([]byte("[No chat history available]\n"))
+		return
+	}
+	defer file.Close()
+
+	// Read and send file content
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		conn.Write([]byte(scanner.Text() + "\n"))
 	}
 }
