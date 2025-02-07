@@ -109,9 +109,19 @@ func handleClient(conn net.Conn) {
 			break
 		}
 
+		if msg == "/exit\n"{
+			break
+		}
+
 		// Broadcast the message with the user's name
 		broadcast <- fmt.Sprintf("%s%s: %s", timestamp, name, msg)
 	}
+	// Handle user disconnection
+	mu.Lock()
+	delete(clients, conn)
+	mu.Unlock()
+	
+	broadcast <- fmt.Sprintf("%s has left our chat\n", name)
 }
 
 // logToFile writes messages to the chat log file
