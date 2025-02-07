@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -108,7 +109,7 @@ func handleClient(conn net.Conn, fileName string) {
 	notifyClients(conn, joinMsg)
 	
 	// Display join message (but DO NOT log it)
-	fmt.Println(joinMsg)
+	// fmt.Println(joinMsg)
 
 	namee := "[" + name + "]"
 	timestamp = "[" + timestamp + "]"
@@ -122,6 +123,16 @@ func handleClient(conn net.Conn, fileName string) {
 
 		if msg == "/exit\n" {
 			break
+		} else if strings.HasPrefix(msg, "/change"){
+			name2 := strings.TrimPrefix(msg, "/change ")
+
+			if name2 == "" {
+				// conn.Write([]byte("Invalid name. Usage: /change <new_name>\n"))
+				continue
+			}
+
+			notifyClients(conn, fmt.Sprintf("%s has changed their name to %s", name, name2))
+			namee = "[" + name2[:len(name2)-1] + "]"
 		}
 
 		// Broadcast the message with the user's name
