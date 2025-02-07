@@ -6,38 +6,36 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"sync"
-	"time"
 )
 
-// Client represents a connected chat client
-type Client struct {
-	conn     net.Conn
-	name     string
-	messages chan string
-}
-
-// Server represents our chat server
-type Server struct {
-	clients    map[*Client]bool
-	broadcast  chan string
-	register   chan *Client
-	unregister chan *Client
-	messages   []string // Store message history
-	mutex      sync.Mutex
-}
+var (
+	clients   = make(map[net.Conn]string) // Store active clients
+	broadcast = make(chan string)       // Channel for broadcasting messages
+	mu        sync.Mutex                // Mutex for thread-safe access to clients map
+)
 
 func main() {
-	ln, _ := net.Listen("tcp", ":8989")
+	port := ":8989"
+
+	if len(os.Args) == 2 {
+		port = ":" + os.Args[1]
+	} else if len(os.Args) > 2 {
+		fmt.Println("Too many arguments")
+		return
+	}
+
+	ln, err := net.Listen("tcp", port)
+	if err != nil {
+		fmt.Println(err)
+	}
 	defer ln.Close()
+	fmt.Println("Listening on the port " + port)
 
-	server := NewServer()
+	file, _ := os.ReadFile("linux.txt")
+	
 
-	go server.run()
-
-	// fmt.Printf("Listening on the port :%s\n", port)
-	// fmt.Println("Listening on the port :8989")
+	go broadcaster()
 
 	for {
 		conn, err := ln.Accept()
@@ -45,124 +43,64 @@ func main() {
 			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
+		conn.Write([]byte(string(file)+"\n"))
+		conn.Write([]byte(string("[ENTER YOUR NAME: ]")))
 
-		s := server
-		clientCount := len(s.clients)
-		if clientCount >= 10 {
-			conn.Write([]byte("Chat is full (max 10 clients). Please try again later.\n"))
-			conn.Close()
-			continue
+		// // Add the new connection
+		// mu.Lock()
+		// clients[conn] = true
+		// mu.Unlock()
+
+		// Notify all users about the new connection
+		// broadcast <- "New user joined the chat\n"
+
+		go handleClient(conn)
+
+		// conn.Write([]byte(string("New user joined the chat" + "\n")))
+	}
+}
+
+
+// broadcaster listens for messages and sends them to all clients
+func broadcaster() {
+	for msg := range broadcast {
+		mu.Lock()
+		for conn := range clients {
+			_, err := conn.Write([]byte(msg))
+			if err != nil {
+				conn.Close()
+				delete(clients, conn)
+			}
 		}
-
-		go server.handleClient(conn)
+		mu.Unlock()
 	}
 }
 
-// Create a new server instance
-func NewServer() *Server {
-	return &Server{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan string),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		messages:   []string{},
-	}
-}
-
-func (s *Server) run() {
-	for {
-		select {
-		case client := <-s.register:
-			s.mutex.Lock()
-			s.clients[client] = true
-			// Send message history to new client
-			for _, msg := range s.messages {
-				client.messages <- msg
-			}
-			s.mutex.Unlock()
-			s.broadcast <- fmt.Sprintf("[%s] %s has joined our chat...", time.Now().Format("2006-01-02 15:04:05"), client.name)
-
-		case client := <-s.unregister:
-			s.mutex.Lock()
-			if _, ok := s.clients[client]; ok {
-				delete(s.clients, client)
-				close(client.messages)
-			}
-			s.mutex.Unlock()
-			s.broadcast <- fmt.Sprintf("[%s] %s has left our chat...", time.Now().Format("2006-01-02 15:04:05"), client.name)
-
-		case message := <-s.broadcast:
-			s.mutex.Lock()
-			s.messages = append(s.messages, message)
-			for client := range s.clients {
-				select {
-				case client.messages <- message:
-				default:
-					close(client.messages)
-					delete(s.clients, client)
-				}
-			}
-			s.mutex.Unlock()
-		}
-	}
-}
-
-func (s *Server) handleClient(conn net.Conn) {
-	// Send welcome message and get client name
-	file, err := os.ReadFile("linux.txt")
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	conn.Write([]byte(string(file) + "\n" + "[ENTER YOUR NAME]: "))
+// handleClient removes the client when they disconnect
+func handleClient(conn net.Conn) {
+	defer conn.Close()
 	reader := bufio.NewReader(conn)
-	name, err := reader.ReadString('\n')
-	if err != nil {
-		conn.Close()
-		return
-	}
 
-	name = strings.TrimSpace(name)
-	if name == "" {
-		conn.Write([]byte("Name cannot be empty\n"))
-		conn.Close()
-		return
-	} else {
-		timestamp := time.Now().Format("2006-01-02 15:04:05")
-		msg := fmt.Sprintf("[%s][%s]:", timestamp ,name)
-		conn.Write([]byte(msg))
+	name, _ := reader.ReadString('\n')
+	name = name[:len(name)-1] // Remove newline character
 
-	}
+	mu.Lock()
+	clients[conn] = name
+	mu.Unlock()
 
-	client := &Client{
-		conn:     conn,
-		name:     name,
-		messages: make(chan string, 10),
-	}
+	// Notify all users about the new connection
+	broadcast <- fmt.Sprintf("%s joined the chat\n", name)
 
-	s.register <- client
-
-	// Start goroutine for writing messages to client
-	go func() {
-		for msg := range client.messages {
-			conn.Write([]byte(msg + "\n"))
-		}
-	}()
-
-	// Read messages from client
+	// Continuously listen for messages from this user
 	for {
-		message, err := reader.ReadString('\n')
+		msg, err := reader.ReadString('\n')
 		if err != nil {
-			s.unregister <- client
-			return
+			break
 		}
-
-		message = strings.TrimSpace(message)
-		if message != "" {
-			s.broadcast <- fmt.Sprintf("[%s][%s]: %s",
-				time.Now().Format("2006-01-02 15:04:05"),
-				client.name,
-				message)
-		}
+	
+		// Broadcast the message with the user's name
+		broadcast <- fmt.Sprintf("%s: %s", name, msg)
 	}
+
+
 }
