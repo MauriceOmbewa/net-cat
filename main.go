@@ -37,7 +37,7 @@ func main() {
 	fmt.Println("Listening on the port " + port)
 
 	// Open log file in append mode
-	logFile, err = os.OpenFile("chat_log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	logFile, err = os.OpenFile("chat_log.txt", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		log.Fatalf("Error opening log file: %v", err)
 	}
