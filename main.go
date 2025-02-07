@@ -36,8 +36,11 @@ func main() {
 	defer ln.Close()
 	fmt.Println("Listening on the port " + port)
 
+	portnum := port[1:]
+	logfileName := fmt.Sprintf("chat_log_%s.txt", portnum)
+
 	// Open log file in append mode
-	logFile, err = os.OpenFile("chat_log.txt", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o644)
+	logFile, err = os.OpenFile(logfileName, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		log.Fatalf("Error opening log file: %v", err)
 	}
@@ -61,7 +64,7 @@ func main() {
 		conn.Write([]byte(string(file) + "\n"))
 		conn.Write([]byte(string("[ENTER YOUR NAME]: ")))
 
-		go handleClient(conn)
+		go handleClient(conn, logfileName)
 	}
 }
 
@@ -84,7 +87,7 @@ func broadcaster() {
 }
 
 // handleClient removes the client when they disconnect
-func handleClient(conn net.Conn) {
+func handleClient(conn net.Conn, fileName string) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
@@ -98,7 +101,7 @@ func handleClient(conn net.Conn) {
 	mu.Unlock()
 
 	// Send chat history before asking for name
-	sendChatHistory(conn)
+	sendChatHistory(conn, fileName)
 
 	// Notify other clients (but NOT the new user)
 	joinMsg := fmt.Sprintf("%s has joined our chat...\n", name)
@@ -149,12 +152,12 @@ func logToFile(msg string) {
 }
 
 // sendChatHistory reads and sends past messages to a new user
-func sendChatHistory(conn net.Conn) {
+func sendChatHistory(conn net.Conn, fileName string) {
 	logMu.Lock()
 	defer logMu.Unlock()
 
 	// Open the log file for reading
-	file, err := os.Open("chat_log.txt")
+	file, err := os.Open(fileName)
 	if err != nil {
 		conn.Write([]byte("[No chat history available]\n"))
 		return
