@@ -43,6 +43,11 @@ func main() {
 			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
+		if len(clients) >= 10{
+			conn.Write([]byte(string("chatroom full..") + "\n"))
+			return
+		}
+
 		conn.Write([]byte(string(file) + "\n"))
 		conn.Write([]byte(string("[ENTER YOUR NAME]: ")))
 
