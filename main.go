@@ -7,12 +7,13 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 var (
 	clients   = make(map[net.Conn]string) // Store active clients
-	broadcast = make(chan string)       // Channel for broadcasting messages
-	mu        sync.Mutex                // Mutex for thread-safe access to clients map
+	broadcast = make(chan string)         // Channel for broadcasting messages
+	mu        sync.Mutex                  // Mutex for thread-safe access to clients map
 )
 
 func main() {
@@ -33,7 +34,6 @@ func main() {
 	fmt.Println("Listening on the port " + port)
 
 	file, _ := os.ReadFile("linux.txt")
-	
 
 	go broadcaster()
 
@@ -43,8 +43,8 @@ func main() {
 			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
-		conn.Write([]byte(string(file)+"\n"))
-		conn.Write([]byte(string("[ENTER YOUR NAME: ]")))
+		conn.Write([]byte(string(file) + "\n"))
+		conn.Write([]byte(string("[ENTER YOUR NAME]: ")))
 
 		// // Add the new connection
 		// mu.Lock()
@@ -59,7 +59,6 @@ func main() {
 		// conn.Write([]byte(string("New user joined the chat" + "\n")))
 	}
 }
-
 
 // broadcaster listens for messages and sends them to all clients
 func broadcaster() {
@@ -83,13 +82,18 @@ func handleClient(conn net.Conn) {
 
 	name, _ := reader.ReadString('\n')
 	name = name[:len(name)-1] // Remove newline character
-
+	
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	
 	mu.Lock()
 	clients[conn] = name
 	mu.Unlock()
 
 	// Notify all users about the new connection
-	broadcast <- fmt.Sprintf("%s joined the chat\n", name)
+	broadcast <- fmt.Sprintf("%s has joined our chat...\n", name)
+	
+	name = "[" + name + "]"
+	timestamp = "[" + timestamp + "]"
 
 	// Continuously listen for messages from this user
 	for {
@@ -97,10 +101,8 @@ func handleClient(conn net.Conn) {
 		if err != nil {
 			break
 		}
-	
+
 		// Broadcast the message with the user's name
-		broadcast <- fmt.Sprintf("%s: %s", name, msg)
+		broadcast <- fmt.Sprintf("%s%s: %s", timestamp, name, msg)
 	}
-
-
 }
