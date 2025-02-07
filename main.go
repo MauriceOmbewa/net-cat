@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -16,7 +15,7 @@ var (
 	broadcast = make(chan string)         // Channel for broadcasting messages
 	mu        sync.Mutex                  // Mutex for thread-safe access to clients map
 	logMu     sync.Mutex                  // Mutex for thread-safe writing to log file
-	logFile   *os.File                     // File to save chat history
+	logFile   *os.File                    // File to save chat history
 )
 
 func main() {
@@ -31,13 +30,14 @@ func main() {
 
 	ln, err := net.Listen("tcp", port)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
+		return
 	}
 	defer ln.Close()
 	fmt.Println("Listening on the port " + port)
 
 	// Open log file in append mode
-	logFile, err = os.OpenFile("chat_log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err = os.OpenFile("chat_log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		log.Fatalf("Error opening log file: %v", err)
 	}
@@ -53,7 +53,7 @@ func main() {
 			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
-		if len(clients) >= 10{
+		if len(clients) >= 10 {
 			conn.Write([]byte(string("chatroom full..") + "\n"))
 			return
 		}
@@ -93,19 +93,22 @@ func handleClient(conn net.Conn) {
 
 	name, _ := reader.ReadString('\n')
 	name = name[:len(name)-1] // Remove newline character
-	
+
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	
+
 	mu.Lock()
 	clients[conn] = name
 	mu.Unlock()
 
 	// Send chat history before asking for name
 	sendChatHistory(conn, name)
-
+	logToFile(fmt.Sprintf("%s has joined our chat...\n", name))
 	// Notify all users about the new connection
-	broadcast <- fmt.Sprintf("%s has joined our chat...\n", name)
-	
+	for conn1 := range clients {
+		if conn1 != conn {
+			conn1.Write([]byte(fmt.Sprintf("%s has joined our chat...\n", name)))
+		}
+	}
 	namee := "[" + name + "]"
 	timestamp = "[" + timestamp + "]"
 
@@ -116,7 +119,7 @@ func handleClient(conn net.Conn) {
 			break
 		}
 
-		if msg == "/exit\n"{
+		if msg == "/exit\n" {
 			break
 		}
 
@@ -127,7 +130,7 @@ func handleClient(conn net.Conn) {
 	mu.Lock()
 	delete(clients, conn)
 	mu.Unlock()
-	
+
 	broadcast <- fmt.Sprintf("%s has left our chat\n", name)
 }
 
