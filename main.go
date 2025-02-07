@@ -62,9 +62,6 @@ func main() {
 		conn.Write([]byte(string("[ENTER YOUR NAME]: ")))
 
 		go handleClient(conn)
-
-		// // Send chat history before asking for name
-		// sendChatHistory(conn)
 	}
 }
 
@@ -101,14 +98,15 @@ func handleClient(conn net.Conn) {
 	mu.Unlock()
 
 	// Send chat history before asking for name
-	sendChatHistory(conn, name)
-	logToFile(fmt.Sprintf("%s has joined our chat...\n", name))
-	// Notify all users about the new connection
-	for conn1 := range clients {
-		if conn1 != conn {
-			conn1.Write([]byte(fmt.Sprintf("%s has joined our chat...\n", name)))
-		}
-	}
+	sendChatHistory(conn)
+
+	// Notify other clients (but NOT the new user)
+	joinMsg := fmt.Sprintf("%s has joined our chat...\n", name)
+	notifyClients(conn, joinMsg)
+	
+	// Display join message (but DO NOT log it)
+	fmt.Println(joinMsg)
+
 	namee := "[" + name + "]"
 	timestamp = "[" + timestamp + "]"
 
@@ -131,7 +129,13 @@ func handleClient(conn net.Conn) {
 	delete(clients, conn)
 	mu.Unlock()
 
-	broadcast <- fmt.Sprintf("%s has left our chat\n", name)
+	// Notify other clients (but NOT the leaving user)
+	leaveMsg := fmt.Sprintf("%s has left our chat\n", name)
+	notifyClients(conn, leaveMsg)
+	
+	// Display leave message (but DO NOT log it)
+	fmt.Println(leaveMsg)
+
 }
 
 // logToFile writes messages to the chat log file
@@ -145,7 +149,7 @@ func logToFile(msg string) {
 }
 
 // sendChatHistory reads and sends past messages to a new user
-func sendChatHistory(conn net.Conn, name string) {
+func sendChatHistory(conn net.Conn) {
 	logMu.Lock()
 	defer logMu.Unlock()
 
@@ -161,5 +165,16 @@ func sendChatHistory(conn net.Conn, name string) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		conn.Write([]byte(scanner.Text() + "\n"))
+	}
+}
+
+// notifyClients sends a message to all clients except the specified one
+func notifyClients(excludeConn net.Conn, message string) {
+	mu.Lock()
+	defer mu.Unlock()
+	for conn := range clients {
+		if conn != excludeConn {
+			conn.Write([]byte(message))
+		}
 	}
 }
