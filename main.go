@@ -93,6 +93,9 @@ func handleClient(conn net.Conn, fileName string) {
 	reader := bufio.NewReader(conn)
 
 	name, _ := reader.ReadString('\n')
+	if name == "\n" {
+		return
+	}
 	name = name[:len(name)-1] // Remove newline character
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
@@ -119,6 +122,10 @@ func handleClient(conn net.Conn, fileName string) {
 		msg, err := reader.ReadString('\n')
 		if err != nil {
 			break
+		}
+
+		if msg == "\n"{
+			continue
 		}
 
 		if msg == "/exit\n" {
