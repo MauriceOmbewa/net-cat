@@ -14,6 +14,8 @@ var (
 	clients   = make(map[net.Conn]string) // Store active clients
 	broadcast = make(chan string)         // Channel for broadcasting messages
 	mu        sync.Mutex                  // Mutex for thread-safe access to clients map
+	logMu     sync.Mutex                  // Mutex for thread-safe writing to log file
+	logFile   *os.File                     // File to save chat history
 )
 
 func main() {
@@ -22,7 +24,7 @@ func main() {
 	if len(os.Args) == 2 {
 		port = ":" + os.Args[1]
 	} else if len(os.Args) > 2 {
-		fmt.Println("Too many arguments")
+		fmt.Println("[USAGE]: ./TCPChat $port")
 		return
 	}
 
@@ -32,6 +34,13 @@ func main() {
 	}
 	defer ln.Close()
 	fmt.Println("Listening on the port " + port)
+
+	// Open log file in append mode
+	logFile, err = os.OpenFile("chat_log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Error opening log file: %v", err)
+	}
+	defer logFile.Close()
 
 	file, _ := os.ReadFile("linux.txt")
 
@@ -51,23 +60,16 @@ func main() {
 		conn.Write([]byte(string(file) + "\n"))
 		conn.Write([]byte(string("[ENTER YOUR NAME]: ")))
 
-		// // Add the new connection
-		// mu.Lock()
-		// clients[conn] = true
-		// mu.Unlock()
-
-		// Notify all users about the new connection
-		// broadcast <- "New user joined the chat\n"
-
 		go handleClient(conn)
-
-		// conn.Write([]byte(string("New user joined the chat" + "\n")))
 	}
 }
 
 // broadcaster listens for messages and sends them to all clients
 func broadcaster() {
 	for msg := range broadcast {
+		// Log the message to the file
+		logToFile(msg)
+
 		mu.Lock()
 		for conn := range clients {
 			_, err := conn.Write([]byte(msg))
@@ -109,5 +111,15 @@ func handleClient(conn net.Conn) {
 
 		// Broadcast the message with the user's name
 		broadcast <- fmt.Sprintf("%s%s: %s", timestamp, name, msg)
+	}
+}
+
+// logToFile writes messages to the chat log file
+func logToFile(msg string) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	_, err := logFile.WriteString(msg)
+	if err != nil {
+		log.Printf("Error writing to log file: %v", err)
 	}
 }
